@@ -27,6 +27,7 @@ EPOCHS = 200000
 LEARNING_RATE = 0.1
 HIDDEN_DIM = 200
 EMBEDDING_DIM = 10
+VOCAB_SIZE = None
 MINOR_DEBUG = True
 MAJOR_DEBUG = False
 random.seed(42)
@@ -55,14 +56,26 @@ def construct_vocab(corpus):
     unique_chars = set(one_big_blob)
     list_unique_chars = list(unique_chars)
     vocab = sorted(list_unique_chars)
-    return vocab
+    VOCAB_SIZE = len(vocab)
+    if MINOR_DEBUG:
+        print("Vocabulary: ", vocab)
+    return vocab, VOCAB_SIZE
 
 def construct_mapping(vocab):
-    element_to_index = {element:index+1 for index,element in enumerate(vocab)}
-    # add the special token '.'
-    element_to_index['.'] = 0 
+    element_to_index = {element:index for index,element in enumerate(vocab)}
+    # Remove space if it exists in the original vocab
+    if ' ' in element_to_index:
+        del element_to_index[' ']
+    # add space as the special token at the end of the vocab
+    element_to_index[' '] = len(element_to_index) 
     # index_to_element 
     index_to_element = {value:key for key,value in element_to_index.items()}
+    if MINOR_DEBUG:
+        print("Vocabulary size:", len(vocab))
+        print("Number of indices:", len(element_to_index))
+        print("First few mappings:", dict(list(element_to_index.items())[:5]))
+        print("First few reverse mappings:", dict(list(index_to_element.items())[:5]))
+        
     return element_to_index, index_to_element
     
 def construct_dataset(corpus: List[str], index_to_element, element_to_index):
@@ -70,7 +83,7 @@ def construct_dataset(corpus: List[str], index_to_element, element_to_index):
     # get each word (Corpus is a list of words: view the get_data function for more info) 
     for word in corpus:
         context = [0] * CONTEXT_LENGTH
-        for char in word+'.':
+        for char in word+' ':
             X.append(context) # 0 0 0 
             Y.append(element_to_index[char])
             if MAJOR_DEBUG:
@@ -120,17 +133,17 @@ def split(corpus, index_to_element, element_to_index):
     Xte, Yte = construct_dataset(corpus[n2:], index_to_element, element_to_index)
     return Xtr, Ytr, Xdev, Ydev, Xte, Yte
 
-def gen_model_params(embedding_dim: int, hidden_dim: int, context_length: int):
+def gen_model_params(embedding_dim: int, hidden_dim: int, context_length: int, vocab_size: int):
     '''
     Model Architecture: A Neural Probabilistic Language Model 
     Authors: Yoshua Bengio et al
     '''
     g = torch.Generator().manual_seed(2147483647)
-    C = torch.randn((27, embedding_dim), generator=g)
+    C = torch.randn((vocab_size+1, embedding_dim), generator=g)
     W1  = torch.randn((embedding_dim*context_length, hidden_dim), generator=g)
     b1 = torch.randn((hidden_dim), generator=g)
-    W2 = torch.randn((hidden_dim, 27), generator=g)
-    b2 = torch.randn((27), generator=g)
+    W2 = torch.randn((hidden_dim, vocab_size+1), generator=g)
+    b2 = torch.randn((vocab_size+1), generator=g)
     parameters = [C, W1, b1, W2, b2]
     return parameters
 
@@ -198,17 +211,26 @@ def sample_from_model(parameters, context_length, num_generation, index_to_eleme
             logits = h @ W2 + b2
             probs = F.softmax(logits, dim=1)
             next_char_index = torch.multinomial(probs, num_samples=1).item()
+            
+            if next_char_index not in index_to_element:
+                continue
+            
             context = context[1:] + [next_char_index]
             generated_text.append(next_char_index)
-            if next_char_index == 0:
+            if next_char_index == len(index_to_element) - 1:
                 break
-        print(''.join(index_to_element[i] for i in generated_text))
+            
+        valid_chars = [index_to_element[i] for i in generated_text if i in index_to_element]
+        print(''.join(valid_chars))
 
 ########## Get the data #########
-corpus = get_data("https://raw.githubusercontent.com/karpathy/makemore/master/names.txt", "names.txt")
+corpus = get_data("https://raw.githubusercontent.com/danielmiessler/SecLists/refs/heads/master/Passwords/Common-Credentials/10-million-password-list-top-10000.txt", "passwords.txt")
 
 ######### Construct a vocabulary for the model using the corpus #########
-vocab = construct_vocab(corpus)
+vocab, VOCAB_SIZE = construct_vocab(corpus)
+
+if MINOR_DEBUG:
+    print(VOCAB_SIZE)
 
 element_to_index, index_to_element = construct_mapping(vocab)
 
@@ -224,7 +246,7 @@ Xtr, Ytr, Xdev, Ydev, Xte, Yte = split(corpus, index_to_element, element_to_inde
 embedding_dim = EMBEDDING_DIM
 hidden_dim = HIDDEN_DIM
 context_length = CONTEXT_LENGTH
-parameters = gen_model_params(embedding_dim=embedding_dim, hidden_dim=hidden_dim, context_length=context_length)
+parameters = gen_model_params(embedding_dim=embedding_dim, hidden_dim=hidden_dim, context_length=context_length, vocab_size=VOCAB_SIZE)
 
 if MINOR_DEBUG:
     print(p.nelement() for p in parameters)
