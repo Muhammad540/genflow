@@ -133,18 +133,31 @@ def split(corpus, index_to_element, element_to_index):
     Xte, Yte = construct_dataset(corpus[n2:], index_to_element, element_to_index)
     return Xtr, Ytr, Xdev, Ydev, Xte, Yte
 
-def gen_model_params(embedding_dim: int, hidden_dim: int, context_length: int, vocab_size: int):
+def gen_model_params(embedding_dim: int, hidden_dim: int, context_length: int, vocab_size: int, Kaiming_init: bool = True, batch_norm: bool = True):
     '''
     Model Architecture: A Neural Probabilistic Language Model 
     Authors: Yoshua Bengio et al
     '''
     g = torch.Generator().manual_seed(2147483647)
     C = torch.randn((vocab_size+1, embedding_dim), generator=g)
-    W1  = torch.randn((embedding_dim*context_length, hidden_dim), generator=g)
-    b1 = torch.randn((hidden_dim), generator=g)
-    W2 = torch.randn((hidden_dim, vocab_size+1), generator=g)
-    b2 = torch.randn((vocab_size+1), generator=g)
-    parameters = [C, W1, b1, W2, b2]
+    if Kaiming_init:
+        W1  = torch.randn((embedding_dim*context_length, hidden_dim), generator=g) * (5/3)/((embedding_dim*context_length)**0.5)
+    else:
+        W1 = torch.randn((embedding_dim*context_length, hidden_dim), generator=g)
+    W2 = torch.randn((hidden_dim, vocab_size+1), generator=g) * 0.01 # This is to prevent model from being overly confident in predicting a wrong character at the start of the training
+    b2 = torch.randn((vocab_size+1), generator=g) * 0 # At the start of training, we dont want the model to favour any particular character over others rather every character is equally likely 1/size_vocab    
+    
+    # Batch Normalization Params 
+    bngain = torch.ones((1, hidden_dim)) # kinda like variance to provide some flexibility for the model to learn 
+    bnmean = torch.zeros((1, hidden_dim)) 
+    bnmean_running = torch.zeros((1,hidden_dim))
+    bnstd_running = torch.ones((1,hidden_dim))
+    
+    if not batch_norm:
+        b1 = torch.randn((hidden_dim), generator=g)
+        parameters = [C, W1, b1, W2, b2]
+    else:
+        parameters = [C, W1, W2, b2, bngain, bnmean]
     return parameters
 
 def enable_gradients(parameters):
