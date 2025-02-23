@@ -23,16 +23,15 @@ from typing import List
 # Context length will determine, how many characters will be used to predict the next character
 CONTEXT_LENGTH  = 5
 BATCH_SIZE = 32
-EPOCHS = 200000
+EPOCHS = 500
+EMBEDDING_DIM = 10
 LEARNING_RATE = 0.1
 HIDDEN_DIM = 200
-EMBEDDING_DIM = 10
 VOCAB_SIZE = 0  # Will be set after vocabulary construction
 MINOR_DEBUG = True
 MAJOR_DEBUG = False
 torch.manual_seed(2147483647)
 random.seed(42)
-generator = torch.Generator().manual_seed(2147483647)
 
 # Useful Functions 
 def get_data(url: str, file_name: str) -> List[str]:
@@ -53,30 +52,22 @@ def get_data(url: str, file_name: str) -> List[str]:
         raise Exception(f"Error processing file: {e}")
 
 def construct_vocab(corpus):
-    one_big_blob = ''.join(corpus)
-    unique_chars = set(one_big_blob)
-    list_unique_chars = list(unique_chars)
-    vocab = sorted(list_unique_chars)
-    vocab_size = len(vocab)  # Use local variable instead
-    if MINOR_DEBUG:
-        print("Vocabulary: ", vocab)
-    return vocab, vocab_size
+    one_big_blob = ''.join(corpus) + ' ' 
+    unique_chars = sorted(set(one_big_blob))
+    return unique_chars, len(unique_chars)
 
 def construct_mapping(vocab):
+    # Add space to the original vocab instead of handling separately
+    if ' ' not in vocab:
+        vocab = vocab + [' ']
+    
     element_to_index = {element:index for index,element in enumerate(vocab)}
-    # Remove space if it exists in the original vocab
-    if ' ' in element_to_index:
-        del element_to_index[' ']
-    # add space as the special token at the end of the vocab
-    element_to_index[' '] = len(element_to_index) 
-    # index_to_element 
-    index_to_element = {value:key for key,value in element_to_index.items()}
+    index_to_element = {index:element for index,element in enumerate(vocab)}
+    
     if MINOR_DEBUG:
-        print("Vocabulary size:", len(vocab))
-        print("Number of indices:", len(element_to_index))
-        print("First few mappings:", dict(list(element_to_index.items())[:5]))
-        print("First few reverse mappings:", dict(list(index_to_element.items())[:5]))
-        
+        print("Final vocabulary size:", len(vocab))
+        print("Element to index mapping:", element_to_index)
+    
     return element_to_index, index_to_element
     
 def construct_dataset(corpus: List[str], index_to_element, element_to_index):
@@ -286,6 +277,8 @@ def compute_batch_norm(parameters, Xtr):
     return bnmeani, bnstd
 
 # I delibrately used alot of functional programming to make the code more readable and modular 
+# comment out the Rest of the code to run the torchified_engine.py file
+'''
 ########## Get the data #########
 corpus = get_data("https://raw.githubusercontent.com/danielmiessler/SecLists/refs/heads/master/Passwords/Common-Credentials/10-million-password-list-top-10000.txt", "passwords.txt")
 
@@ -299,9 +292,9 @@ element_to_index, index_to_element = construct_mapping(vocab)
 
 ########## Build the dataset ##########
 '''
-So given the corpus of data, we will build a dataset: X -> Y mapping 
-Our model will learn to predict the next character given a context 'CONTEXT_LENGTH' characters long 
-We will divide the data into training, dev, test sets.
+#So given the corpus of data, we will build a dataset: X -> Y mapping 
+#Our model will learn to predict the next character given a context 'CONTEXT_LENGTH' characters long 
+#We will divide the data into training, dev, test sets.
 '''
 Xtr, Ytr, Xdev, Ydev, Xte, Yte = split(corpus, index_to_element, element_to_index)
 
@@ -331,3 +324,4 @@ print(f"Dev Loss: {dev_loss_value}")
 ## Sample from the model 
 sample_from_model(parameters, context_length, num_generation=30, index_to_element=index_to_element, 
                  batch_norm=True, bnmean_running=bnmean_running, bnstd_running=bnstd_running)
+'''
